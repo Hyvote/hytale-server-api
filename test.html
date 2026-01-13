@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hytale Server API Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        h1 {
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #3a3a3a;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .response {
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .loading {
+            color: #ffc107;
+        }
+        .error {
+            color: #f44336;
+        }
+        .success {
+            color: #4CAF50;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            color: #e0e0e0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .endpoint {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+            border: 1px solid #3a3a3a;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 Hytale Server API Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: API Welcome</h2>
+        <p>Test the root endpoint to see API information.</p>
+        <div class="endpoint">GET /index.php</div>
+        <button onclick="testWelcome()">Test Welcome</button>
+        <div id="welcome-response" class="response" style="display:none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: API Metadata</h2>
+        <p>Get API configuration and metadata.</p>
+        <div class="endpoint">GET /api/meta</div>
+        <button onclick="testMeta()">Test Meta</button>
+        <div id="meta-response" class="response" style="display:none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Server Query</h2>
+        <p>Query a Hytale server for status information.</p>
+        <div class="endpoint">GET /api/ping?host=your-server.com&port=5523&fields=server,players</div>
+
+        <label>Host:</label>
+        <input type="text" id="host" value="your-server.com" placeholder="Server host or IP">
+
+        <label>Port:</label>
+        <input type="number" id="port" value="5523" placeholder="5523">
+
+        <label>Fields (comma-separated, leave empty for all):</label>
+        <input type="text" id="fields" value="" placeholder="server,universe,players,plugins">
+
+        <button onclick="testPing()">Test Server Query</button>
+        <div id="ping-response" class="response" style="display:none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: Batch Query</h2>
+        <p>Query multiple servers at once.</p>
+        <div class="endpoint">POST /api/ping</div>
+        <button onclick="testBatch()">Test Batch Query</button>
+        <div id="batch-response" class="response" style="display:none;"></div>
+    </div>
+
+    <script>
+        const apiBase = window.location.pathname.replace('test.html', '');
+
+        function displayResponse(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+
+            if (isError) {
+                element.innerHTML = '<span class="error">❌ Error:</span><pre>' +
+                    JSON.stringify(data, null, 2) + '</pre>';
+            } else {
+                element.innerHTML = '<span class="success">✅ Success:</span><pre>' +
+                    JSON.stringify(data, null, 2) + '</pre>';
+            }
+        }
+
+        function displayLoading(elementId) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.innerHTML = '<span class="loading">⏳ Loading...</span>';
+        }
+
+        async function testWelcome() {
+            displayLoading('welcome-response');
+            try {
+                const response = await fetch(apiBase + 'index.php');
+                const data = await response.json();
+                displayResponse('welcome-response', data, !response.ok);
+            } catch (error) {
+                displayResponse('welcome-response', {error: error.message}, true);
+            }
+        }
+
+        async function testMeta() {
+            displayLoading('meta-response');
+            try {
+                const response = await fetch(apiBase + 'api/meta');
+                const data = await response.json();
+                displayResponse('meta-response', data, !response.ok);
+            } catch (error) {
+                displayResponse('meta-response', {error: error.message}, true);
+            }
+        }
+
+        async function testPing() {
+            displayLoading('ping-response');
+            const host = document.getElementById('host').value;
+            const port = document.getElementById('port').value;
+            const fields = document.getElementById('fields').value;
+
+            try {
+                let url = `${apiBase}api/ping?host=${encodeURIComponent(host)}&port=${port}`;
+                if (fields.trim()) {
+                    url += `&fields=${encodeURIComponent(fields)}`;
+                }
+                const response = await fetch(url);
+                const data = await response.json();
+                displayResponse('ping-response', data, !response.ok);
+            } catch (error) {
+                displayResponse('ping-response', {error: error.message}, true);
+            }
+        }
+
+        async function testBatch() {
+            displayLoading('batch-response');
+            const payload = {
+                servers: [
+                    {"host": "your-server.com", "port": 5523}
+                ]
+            };
+
+            try {
+                const response = await fetch(apiBase + 'api/ping', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                displayResponse('batch-response', data, !response.ok);
+            } catch (error) {
+                displayResponse('batch-response', {error: error.message}, true);
+            }
+        }
+    </script>
+</body>
+</html>

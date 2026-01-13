@@ -1,0 +1,22 @@
+# Cache directory
+cache/*.json
+cache/*
+!cache/.gitkeep
+
+# Config file (may contain sensitive IPs)
+# Uncomment if you want to ignore local config
+# config.php
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
