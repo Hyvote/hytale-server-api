@@ -43,15 +43,21 @@ class HytaleServerStatus
             // Build the Nitrado Query endpoint URL
             // Check if host already includes protocol
             if (preg_match('/^https?:\/\//i', $this->host)) {
-                // Host includes protocol, use as-is
+                // Host includes protocol, use as-is (no fallback)
                 $url = "{$this->host}:{$this->port}/Nitrado/Query";
+                $response = $this->makeRequest($url);
             } else {
-                // No protocol specified, default to https
-                $url = "https://{$this->host}:{$this->port}/Nitrado/Query";
-            }
+                // No protocol specified, try HTTPS first, fallback to HTTP
+                $httpsUrl = "https://{$this->host}:{$this->port}/Nitrado/Query";
 
-            // Make the request
-            $response = $this->makeRequest($url);
+                try {
+                    $response = $this->makeRequest($httpsUrl);
+                } catch (Exception $httpsError) {
+                    // HTTPS failed, try HTTP as fallback
+                    $httpUrl = "http://{$this->host}:{$this->port}/Nitrado/Query";
+                    $response = $this->makeRequest($httpUrl);
+                }
+            }
 
             // Calculate latency
             $latency = round((microtime(true) - $startTime) * 1000, 1);
