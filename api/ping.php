@@ -3,6 +3,7 @@
 // Load configuration and dependencies
 $config = require __DIR__ . '/../config.php';
 require_once __DIR__ . '/../lib/HytaleServerStatus.php';
+require_once __DIR__ . '/../lib/HyQueryServerStatus.php';
 
 /**
  * Ping endpoint - handles both GET and POST requests
@@ -40,13 +41,17 @@ function handleGetRequest(array $config): void
         http_response_code(400);
         echo json_encode([
             'error' => 'Missing required parameter: host',
-            'usage' => '/api/ping?host=your-server.com&port=5523&fields=server,players'
+            'usage' => '/api/ping?host=your-server.com&port=5523&fields=server,players&method=nitrado'
         ]);
         return;
     }
 
     $host = trim($_GET['host']);
-    $port = isset($_GET['port']) ? (int)$_GET['port'] : $config['default_port'];
+    $method = isset($_GET['method']) ? strtolower(trim($_GET['method'])) : 'nitrado';
+
+    // Determine default port based on method
+    $defaultPort = ($method === 'hyquery') ? 5520 : $config['default_port'];
+    $port = isset($_GET['port']) ? (int)$_GET['port'] : $defaultPort;
     $fields = isset($_GET['fields']) ? parseFields($_GET['fields']) : [];
 
     // Validate port range
@@ -58,8 +63,17 @@ function handleGetRequest(array $config): void
         return;
     }
 
+    // Validate method
+    if (!in_array($method, ['nitrado', 'hyquery'])) {
+        http_response_code(400);
+        echo json_encode([
+            'error' => 'Invalid method. Must be "nitrado" or "hyquery"'
+        ]);
+        return;
+    }
+
     // Query the server
-    $status = queryServer($host, $port, $config, $fields);
+    $status = queryServer($host, $port, $config, $fields, $method);
 
     // Return response
     http_response_code(200);
@@ -112,8 +126,18 @@ function handlePostRequest(array $config): void
         return;
     }
 
-    // Get global fields parameter (applies to all servers unless overridden)
+    // Get global parameters (apply to all servers unless overridden)
     $globalFields = isset($data['fields']) ? parseFields($data['fields']) : [];
+    $globalMethod = isset($data['method']) ? strtolower(trim($data['method'])) : 'nitrado';
+
+    // Validate global method
+    if (!in_array($globalMethod, ['nitrado', 'hyquery'])) {
+        http_response_code(400);
+        echo json_encode([
+            'error' => 'Invalid method. Must be "nitrado" or "hyquery"'
+        ]);
+        return;
+    }
 
     // Query all servers
     $results = [];
@@ -128,7 +152,23 @@ function handlePostRequest(array $config): void
         }
 
         $host = trim($server['host']);
-        $port = isset($server['port']) ? (int)$server['port'] : $config['default_port'];
+
+        // Use server-specific method if provided, otherwise use global method
+        $method = isset($server['method']) ? strtolower(trim($server['method'])) : $globalMethod;
+
+        // Validate method
+        if (!in_array($method, ['nitrado', 'hyquery'])) {
+            $results[] = [
+                'host' => $host,
+                'online' => false,
+                'error' => 'Invalid method'
+            ];
+            continue;
+        }
+
+        // Determine default port based on method
+        $defaultPort = ($method === 'hyquery') ? 5520 : $config['default_port'];
+        $port = isset($server['port']) ? (int)$server['port'] : $defaultPort;
 
         // Use server-specific fields if provided, otherwise use global fields
         $fields = isset($server['fields']) ? parseFields($server['fields']) : $globalFields;
@@ -144,7 +184,7 @@ function handlePostRequest(array $config): void
         }
 
         // Query the server
-        $results[] = queryServer($host, $port, $config, $fields);
+        $results[] = queryServer($host, $port, $config, $fields, $method);
     }
 
     // Return results
@@ -161,29 +201,38 @@ function handlePostRequest(array $config): void
  * @param int $port Server port
  * @param array $config Configuration array
  * @param array $fields Fields to include in response
+ * @param string $method Query method ('nitrado' or 'hyquery')
  * @return array Server status data
  */
-function queryServer(string $host, int $port, array $config, array $fields = []): array
+function queryServer(string $host, int $port, array $config, array $fields = [], string $method = 'nitrado'): array
 {
     // Check cache if enabled
     $cacheKey = null;
     if ($config['cache_duration'] > 0) {
-        // Include fields in cache key to avoid returning wrong data
+        // Include fields and method in cache key to avoid returning wrong data
         $fieldsKey = empty($fields) ? 'all' : implode('_', $fields);
-        $cacheKey = "server_{$host}_{$port}_{$fieldsKey}";
+        $cacheKey = "server_{$method}_{$host}_{$port}_{$fieldsKey}";
         $cached = getFromCache($cacheKey);
         if ($cached !== null) {
             return $cached;
         }
     }
 
-    // Create HytaleServerStatus instance and query
-    $serverStatus = new HytaleServerStatus(
-        $host,
-        $port,
-        $config['timeout_seconds'],
-        $config['verify_ssl']
-    );
+    // Create appropriate server status instance based on method
+    if ($method === 'hyquery') {
+        $serverStatus = new HyQueryServerStatus(
+            $host,
+            $port,
+            $config['timeout_seconds']
+        );
+    } else {
+        $serverStatus = new HytaleServerStatus(
+            $host,
+            $port,
+            $config['timeout_seconds'],
+            $config['verify_ssl']
+        );
+    }
 
     $result = $serverStatus->query($fields);
 

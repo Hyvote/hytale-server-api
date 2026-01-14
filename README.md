@@ -1,10 +1,10 @@
 # Hytale Server Polling API
 
-A PHP-based API for querying Hytale game servers using the Nitrado Query protocol. This API mirrors the functionality of the Minecraft Server Polling API but is specifically designed for Hytale servers.
+A PHP-based API for querying Hytale game servers using multiple query protocols. This API mirrors the functionality of the Minecraft Server Polling API but is specifically designed for Hytale servers.
 
 ## Features
 
-- Query Hytale servers via HTTPS (Nitrado Query API)
+- Query Hytale servers via HTTPS (Nitrado Query API) or UDP (HyQuery protocol)
 - Get server information (name, version, players, plugins)
 - Support for single and batch server queries
 - Built-in caching system
@@ -66,24 +66,28 @@ Returns API information and available endpoints.
 
 ### 2. Server Ping (Single Query)
 ```
-GET /api/ping?host=your-server.com&port=5523&fields=server,players
+GET /api/ping?host=your-server.com&port=5523&fields=server,players&method=nitrado
 ```
 
 **Parameters:**
 - `host` (required): Server hostname or IP address
-- `port` (optional): Server port (default: 5523)
+- `port` (optional): Server port (default: 5523 for nitrado, 5520 for hyquery)
 - `fields` (optional): Comma-separated list of fields to include in response
   - Valid values: `server`, `universe`, `players`, `plugins`
   - Default: all fields
   - Example: `fields=server,players` returns only server and player info
+- `method` (optional): Query protocol to use
+  - Valid values: `nitrado` (HTTPS), `hyquery` (UDP)
+  - Default: `nitrado`
 
-**Example Response:**
+**Example Response (Nitrado method):**
 ```json
 {
     "online": true,
     "host": "your-server.com",
     "port": 5523,
     "latency_ms": 401.9,
+    "method": "nitrado",
     "server": {
         "name": "THIS IS THE SERVER NAME",
         "version": "2026.01.13-dcad8778f",
@@ -108,6 +112,36 @@ GET /api/ping?host=your-server.com&port=5523&fields=server,players
 }
 ```
 
+**Example Response (HyQuery method):**
+```json
+{
+    "online": true,
+    "host": "192.168.1.78",
+    "port": 5520,
+    "latency_ms": 12.3,
+    "method": "hyquery",
+    "server": {
+        "name": "THIS IS THE SERVER NAME",
+        "version": "2026.01.13-dcad8778f",
+        "motd": "§aWelcome to §lMy Server§r!",
+        "max_players": 100
+    },
+    "universe": {
+        "current_players": 0,
+        "default_world": "unknown"
+    },
+    "players": {
+        "online": 0,
+        "max": 100,
+        "list": []
+    },
+    "plugins": {
+        "count": 0,
+        "list": []
+    }
+}
+```
+
 ### 3. Server Ping (Batch Query)
 ```
 POST /api/ping
@@ -116,19 +150,25 @@ Content-Type: application/json
 {
     "servers": [
         {"host": "your-server.com", "port": 5523},
+        {"host": "192.168.1.78", "port": 5520, "method": "hyquery"},
         {"host": "another-server.com", "fields": "server,players"}
     ],
-    "fields": "server,universe"
+    "fields": "server,universe",
+    "method": "nitrado"
 }
 ```
 
 **Parameters:**
 - `servers` (required): Array of server objects to query
-  - Each server can have: `host`, `port`, `fields`
+  - Each server can have: `host`, `port`, `fields`, `method`
 - `fields` (optional): Global fields filter (applies to all servers unless overridden)
   - Can be a comma-separated string or array
   - Valid values: `server`, `universe`, `players`, `plugins`
   - Individual servers can override with their own `fields` parameter
+- `method` (optional): Global query method (applies to all servers unless overridden)
+  - Valid values: `nitrado`, `hyquery`
+  - Default: `nitrado`
+  - Individual servers can override with their own `method` parameter
 
 **Example Response:**
 ```json
@@ -226,13 +266,51 @@ curl -X POST http://localhost/api/ping \
 curl "http://localhost/api/meta"
 ```
 
+## Query Methods
+
+This API supports two different query protocols for Hytale servers:
+
+### Nitrado Query (HTTPS)
+
+- **Protocol**: HTTPS JSON API
+- **Port**: 5523 (default)
+- **Pros**:
+  - More detailed server information
+  - Plugin version, state, and loaded status
+  - Revision, patchline, protocol hash
+  - Default world information
+- **Cons**:
+  - Requires Nitrado WebServer plugin installed
+  - Slower (HTTPS overhead)
+  - May require SSL certificate configuration
+
+### HyQuery (UDP)
+
+- **Protocol**: Binary UDP packets
+- **Port**: 5520 (game server port)
+- **Pros**:
+  - Very fast (UDP, no SSL overhead)
+  - Works on game port (no additional port configuration)
+  - No extra plugins required (HyQuery plugin handles it)
+  - Supports Minecraft color codes in MOTD
+- **Cons**:
+  - Less detailed information
+  - No plugin versions or detailed state
+  - No revision/patchline information
+
+### Choosing a Method
+
+- Use **Nitrado** when you need detailed server information and plugin data
+- Use **HyQuery** when you need fast queries with minimal setup
+- Mix both methods in batch queries to optimize for different servers
+
 ## Differences from Minecraft API
 
-1. **Protocol**: Uses HTTPS JSON API instead of binary socket protocol
-2. **Port**: Default port is 5523 (not 25565)
-3. **SSL**: Supports SSL verification (disable for self-signed certs)
+1. **Protocol**: Uses HTTPS JSON API or UDP binary protocol (not TCP binary)
+2. **Port**: Default port is 5523 for Nitrado or 5520 for HyQuery (not 25565)
+3. **SSL**: Supports SSL verification for Nitrado method (disable for self-signed certs)
 4. **No Player API**: Hytale doesn't use Mojang's API (no `/api/player` endpoint)
-5. **Plugin Info**: Returns detailed plugin information from Nitrado Query
+5. **Plugin Info**: Returns detailed plugin information (varies by method)
 
 ## Caching
 
