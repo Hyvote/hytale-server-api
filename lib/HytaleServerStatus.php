@@ -41,7 +41,14 @@ class HytaleServerStatus
 
         try {
             // Build the Nitrado Query endpoint URL
-            $url = "https://{$this->host}:{$this->port}/Nitrado/Query";
+            // Check if host already includes protocol
+            if (preg_match('/^https?:\/\//i', $this->host)) {
+                // Host includes protocol, use as-is
+                $url = "{$this->host}:{$this->port}/Nitrado/Query";
+            } else {
+                // No protocol specified, default to https
+                $url = "https://{$this->host}:{$this->port}/Nitrado/Query";
+            }
 
             // Make the request
             $response = $this->makeRequest($url);
